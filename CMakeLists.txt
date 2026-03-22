@@ -34,6 +34,15 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(rapidcsv)
 message(STATUS "[DHCalc] Fetched rapidcsv v8.83")
 
+# ── utf8cpp (header-only, fetched automatically) ────────────────────────────
+FetchContent_Declare(
+    utf8cpp
+    GIT_REPOSITORY https://github.com/nemtrif/utfcpp.git
+    GIT_TAG        v3.2.3
+)
+FetchContent_MakeAvailable(utf8cpp)
+message(STATUS "[DHCalc] Fetched utf8cpp v3.2.3")
+
 # ── Generate empty DH table (0 joints) ──────────────────────────────────────
 file(MAKE_DIRECTORY "${PROJECT_SOURCE_DIR}/examples")
 set(DHCALC_EMPTY_TABLE_PATH "${PROJECT_SOURCE_DIR}/examples/empty.dh.tsv")
@@ -55,6 +64,7 @@ add_library(
 )
 
 target_include_directories(dhcalc_lib PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(dhcalc_lib PRIVATE ${utf8cpp_SOURCE_DIR}/source)
 target_link_libraries(dhcalc_lib PUBLIC Eigen3::Eigen rapidcsv)
 target_compile_features(dhcalc_lib PUBLIC cxx_std_20)
 

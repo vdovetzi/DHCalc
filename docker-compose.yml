@@ -1,0 +1,14 @@
+version: '3.8'
+
+services:
+  build:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: dhcalc:latest
+
+  test:
+    image: dhcalc:latest
+    depends_on:
+      - build
+    command: ctest --output-on-failure
