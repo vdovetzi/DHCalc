@@ -1,5 +1,5 @@
 # https://en.wikipedia.org/wiki/Stanford_arm
-joint	θ_deg	α_deg	r	d
+joint	θ	α	r	d
 1	θ1	90.0	l2	l1
 2	90+θ2	90.0	0.0	0.0
 3	90	0.0	0.0	l3+l4+d3

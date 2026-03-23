@@ -80,6 +80,9 @@ std::string format_matrix(const DenseMatrix &M, int precision,
       auto cleaned =
           utilities::clean_expression(expr, zero_threshold, precision);
       output << ' ' << cleaned->__str__();
+      if (j + 1 != M.ncols()) {
+        output << ',';
+      }
     }
     output << " ]";
 
