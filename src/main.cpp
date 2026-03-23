@@ -3,12 +3,6 @@
 
 #include <argparse/argparse.hpp>
 
-#include <cstdlib>
-#include <filesystem>
-#include <iostream>
-#include <string>
-#include <vector>
-
 int main(int argc, char *argv[]) {
   argparse::ArgumentParser program("dhcalc", "0.0.1");
 
@@ -49,7 +43,7 @@ int main(int argc, char *argv[]) {
     const std::vector<dhcalc::DHFrameParameters> joints =
         dhcalc::parse_dh_table(input_path);
 
-    const dhcalc::Matrix4 transform = dhcalc::compute_FK(joints);
+    const SymEngine::DenseMatrix transform = dhcalc::compute_FK(joints);
 
     std::cout << "Base-to-end-effector homogeneous transformation matrix\n"
               << dhcalc::format_matrix(transform, precision) << '\n';

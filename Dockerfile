@@ -10,15 +10,11 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libgtest-dev \
     git \
     ca-certificates \
+    libgmp-dev \
+    libmpfr-dev \
     && update-ca-certificates && rm -rf /var/lib/apt/lists/*
 
 ENV GIT_SSL_CAINFO=/etc/ssl/certs/ca-certificates.crt
-
-# Build GoogleTest
-# RUN cd /usr/src/gtest && \
-#     cmake . -DCMAKE_BUILD_TYPE=Release && \
-#     make -j$(nproc) && \
-#     cp lib/libgtest*.a /usr/lib/
 
 # Copy the source code into the container
 WORKDIR /workspace

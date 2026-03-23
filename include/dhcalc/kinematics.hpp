@@ -1,24 +1,20 @@
 #pragma once
 
-#include <Eigen/Dense>
-#include <string>
-#include <vector>
+#include "symengine/expression.h"
 
 namespace dhcalc {
 
-using Matrix4 = Eigen::Matrix4d;
-
 struct DHFrameParameters {
   std::string name;
-  double theta_radians{};
-  double alpha_radians{};
-  double r{};
-  double d{};
+  SymEngine::Expression theta;
+  SymEngine::Expression alpha;
+  SymEngine::Expression r;
+  SymEngine::Expression d;
 };
 
-Matrix4 identity_matrix();
-Matrix4 compute_H(const DHFrameParameters &row );
-Matrix4 compute_FK(const std::vector<DHFrameParameters> &rows);
-std::string format_matrix(const Matrix4 &matrix, int precision = 6);
-
+SymEngine::DenseMatrix identity_matrix();
+SymEngine::DenseMatrix compute_H(const DHFrameParameters &row);
+SymEngine::DenseMatrix compute_FK(const std::vector<DHFrameParameters> &rows);
+std::string format_matrix(const SymEngine::DenseMatrix &M, int precision = 6,
+                          double zero_threshold = 1e-10);
 } // namespace dhcalc

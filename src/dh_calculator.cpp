@@ -1,53 +1,89 @@
 #include "dhcalc/kinematics.hpp"
+#include "internal/utility.hpp"
+#include "symengine/basic.h"
+#include "symengine/dict.h"
+#include "symengine/real_double.h"
 
-#include <cmath>
-#include <iomanip>
-#include <sstream>
-#include <stdexcept>
+using SymEngine::DenseMatrix;
+using SymEngine::Expression;
 
 namespace dhcalc {
 
-Matrix4 identity_matrix() { return Matrix4::Identity(); }
-
-Matrix4 compute_H(const DHFrameParameters &row) {
-  const double ct = std::cos(row.theta_radians);
-  const double st = std::sin(row.theta_radians);
-  const double ca = std::cos(row.alpha_radians);
-  const double sa = std::sin(row.alpha_radians);
-
-  Matrix4 H;
-  H << ct, -st * ca, st * sa, row.r * ct, st, ct * ca, -ct * sa, row.r * st,
-      0.0, sa, ca, row.d, 0.0, 0.0, 0.0, 1.0;
-  return H;
+DenseMatrix identity_matrix() {
+  DenseMatrix I(4, 4);
+  for (size_t i = 0; i < 4; ++i) {
+    for (size_t j = 0; j < 4; ++j) {
+      if (i != j) {
+        I.set(i, j, SymEngine::real_double(0));
+      } else {
+        I.set(i, j, SymEngine::real_double(1));
+      }
+    }
+  }
+  return I;
 }
 
-Matrix4 compute_FK(const std::vector<DHFrameParameters> &rows) {
-  Matrix4 result = Matrix4::Identity();
+DenseMatrix compute_H(const DHFrameParameters &row) {
+  auto theta = row.theta;
+  auto alpha = row.alpha;
+  auto r = row.r;
+  auto d = row.d;
+
+  Expression cos_theta = cos(theta);
+  Expression sin_theta = sin(theta);
+  Expression cos_alpha = cos(alpha);
+  Expression sin_alpha = sin(alpha);
+
+  DenseMatrix T(4, 4);
+  T.set(0, 0, cos_theta);
+  T.set(0, 1, -sin_theta * cos_alpha);
+  T.set(0, 2, sin_theta * sin_alpha);
+  T.set(0, 3, r * cos_theta);
+  T.set(1, 0, sin_theta);
+  T.set(1, 1, cos_theta * cos_alpha);
+  T.set(1, 2, -cos_theta * sin_alpha);
+  T.set(1, 3, r * sin_theta);
+  T.set(2, 0, SymEngine::real_double(0));
+  T.set(2, 1, sin_alpha);
+  T.set(2, 2, cos_alpha);
+  T.set(2, 3, d);
+  T.set(3, 0, SymEngine::real_double(0));
+  T.set(3, 1, SymEngine::real_double(0));
+  T.set(3, 2, SymEngine::real_double(0));
+  T.set(3, 3, SymEngine::real_double(1));
+
+  return T;
+}
+
+DenseMatrix compute_FK(const std::vector<DHFrameParameters> &rows) {
+  DenseMatrix result = identity_matrix();
 
   for (const DHFrameParameters &row : rows) {
-    result *= compute_H(row);
+    result.mul_matrix(compute_H(row), result);
   }
 
   return result;
 }
 
-std::string format_matrix(const Matrix4 &matrix, int precision) {
-  if (precision < 0) {
-    throw std::invalid_argument("Precision must be non-negative.");
+std::string format_matrix(const DenseMatrix &M, int precision,
+                          double zero_threshold) {
+  if (precision < 1) {
+    throw std::invalid_argument("Precision must be >= 1.");
   }
 
-  const int width = precision + 8;
   std::ostringstream output;
-  output << std::fixed << std::setprecision(precision);
 
-  for (Eigen::Index row = 0; row < matrix.rows(); ++row) {
+  for (size_t i = 0; i < M.nrows(); ++i) {
     output << "[";
-    for (Eigen::Index col = 0; col < matrix.cols(); ++col) {
-      output << ' ' << std::setw(width) << matrix(row, col);
+    for (size_t j = 0; j < M.ncols(); ++j) {
+      auto expr = expand(M.get(i, j));
+      auto cleaned =
+          utilities::clean_expression(expr, zero_threshold, precision);
+      output << ' ' << cleaned->__str__();
     }
     output << " ]";
 
-    if (row + 1 != matrix.rows()) {
+    if (i + 1 != M.nrows()) {
       output << '\n';
     }
   }

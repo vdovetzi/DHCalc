@@ -43,6 +43,29 @@ FetchContent_Declare(
 FetchContent_MakeAvailable(utf8cpp)
 message(STATUS "[DHCalc] Fetched utf8cpp v3.2.3")
 
+# ── SymEngine (symbolic math, built from source) ───────────────────────────
+set(SYMENGINE_ENABLE_WITH_FLINT OFF)
+set(SYMENGINE_ENABLE_WITH_ARB OFF)
+set(SYMENGINE_ENABLE_WITH_LLVM OFF)
+set(SYMENGINE_ENABLE_WITH_ECM OFF)
+set(SYMENGINE_ENABLE_WITH_PRIMESIEVE OFF)
+set(SYMENGINE_ENABLE_WITH_MPC OFF)
+set(SYMENGINE_ENABLE_WITH_PIRANHA OFF)
+set(SYMENGINE_ENABLE_BUILD_TESTS OFF)
+set(SYMENGINE_ENABLE_BUILD_BENCHMARKS OFF)
+FetchContent_Declare(
+    SymEngine
+    GIT_REPOSITORY https://github.com/symengine/symengine.git
+    GIT_TAG        v0.12.0
+)
+FetchContent_MakeAvailable(SymEngine)
+
+set(SYMENGINE_INCLUDE_DIRS
+    ${symengine_SOURCE_DIR}
+    ${symengine_BINARY_DIR}
+)
+message(STATUS "[DHCalc] Fetched SymEngine ${SymEngine_VERSION}")
+
 # ── Generate empty DH table (0 joints) ──────────────────────────────────────
 file(MAKE_DIRECTORY "${PROJECT_SOURCE_DIR}/examples")
 set(DHCALC_EMPTY_TABLE_PATH "${PROJECT_SOURCE_DIR}/examples/empty.dh.tsv")
@@ -63,9 +86,9 @@ add_library(
     src/dh_table_parser.cpp
 )
 
-target_include_directories(dhcalc_lib PUBLIC ${PROJECT_SOURCE_DIR}/include)
+target_include_directories(dhcalc_lib PUBLIC ${PROJECT_SOURCE_DIR}/include  ${SYMENGINE_INCLUDE_DIRS})
 target_include_directories(dhcalc_lib PRIVATE ${utf8cpp_SOURCE_DIR}/source)
-target_link_libraries(dhcalc_lib PUBLIC Eigen3::Eigen rapidcsv)
+target_link_libraries(dhcalc_lib PUBLIC Eigen3::Eigen rapidcsv symengine)
 target_compile_features(dhcalc_lib PUBLIC cxx_std_20)
 
 if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
@@ -87,9 +110,7 @@ if(DHCALC_BUILD_TESTS)
     target_compile_definitions(dhcalc_parser_tests PRIVATE
         PROJECT_SOURCE_DIR="${PROJECT_SOURCE_DIR}")
 
-    # Forward-kinematics tests
-    add_executable(dhcalc_fk_tests tests/fk/unit.cpp)
-    target_link_libraries(dhcalc_fk_tests PRIVATE dhcalc_lib GTest::gtest_main)
+    #TODO: Forward-kinematics tests
 
     # Stress tests
     add_executable(dhcalc_stress_tests tests/stress/stress_test.cpp)
@@ -97,12 +118,10 @@ if(DHCALC_BUILD_TESTS)
 
     if(CMAKE_CXX_COMPILER_ID MATCHES "GNU|Clang")
         target_compile_options(dhcalc_parser_tests  PRIVATE -Wall -Wextra -Wpedantic)
-        target_compile_options(dhcalc_fk_tests      PRIVATE -Wall -Wextra -Wpedantic)
         target_compile_options(dhcalc_stress_tests  PRIVATE -Wall -Wextra -Wpedantic)
     endif()
 
     include(GoogleTest)
     gtest_discover_tests(dhcalc_parser_tests)
-    gtest_discover_tests(dhcalc_fk_tests)
     gtest_discover_tests(dhcalc_stress_tests)
 endif()

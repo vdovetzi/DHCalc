@@ -1,5 +1,6 @@
 #include "dhcalc/dh_table_parser.hpp"
 #include "internal/utility.hpp"
+#include "symengine/parser/parser.h"
 
 #include <exception>
 #include <rapidcsv.h>
@@ -8,7 +9,6 @@
 #include <cctype>
 #include <fstream>
 #include <istream>
-#include <numbers>
 #include <optional>
 #include <string>
 #include <unordered_map>
@@ -17,12 +17,10 @@
 namespace dhcalc {
 namespace {
 
-constexpr double kDegreesToRadians = std::numbers::pi_v<double> / 180.0;
-
 // ── Column resolution ───────────────────────────────────────────────────────
 
 struct ResolvedColumns {
-  std::string theta_col; // original column name in the document
+  std::string theta_col;
   bool theta_in_degrees{};
   std::string alpha_col;
   bool alpha_in_degrees{};
@@ -94,46 +92,6 @@ resolve_columns(const std::vector<std::string> &raw_column_names) {
   return cols;
 }
 
-// ── Strict numeric parsing ──────────────────────────────────────────────────
-// rapidcsv's built-in GetCell<double> may silently accept trailing garbage
-// ("10xyz" → 10.0).  We parse as string first and validate the entire token.
-
-double parse_double_strict(const std::string &raw, std::size_t row,
-                           const std::string &column) {
-  const std::string value = utilities::trim_copy(raw);
-  if (value.empty()) {
-    throw ParseError("Row " + std::to_string(row + 1) + ", column '" + column +
-                     "': value is empty.");
-  }
-
-  try {
-    std::size_t parsed_characters = 0;
-    const double result = std::stod(value, &parsed_characters);
-    if (parsed_characters != value.size()) {
-      throw ParseError("Row " + std::to_string(row + 1) + ", column '" +
-                       column + "': '" + value + "' is not a valid number.");
-    }
-    return result;
-  } catch (const ParseError &) {
-    throw;
-  } catch (const std::exception &) {
-    throw ParseError("Row " + std::to_string(row + 1) + ", column '" + column +
-                     "': '" + value + "' is not a valid number.");
-  }
-}
-
-double get_numeric_cell(const rapidcsv::Document &doc,
-                        const std::string &column, std::size_t row) {
-  std::string raw;
-  try {
-    raw = doc.GetCell<std::string>(column, row);
-  } catch (const std::exception &) {
-    throw ParseError("Row " + std::to_string(row + 1) + ", column '" + column +
-                     "': missing value.");
-  }
-  return parse_double_strict(raw, row, column);
-}
-
 } // namespace
 
 namespace detail {
@@ -157,11 +115,27 @@ std::vector<DHFrameParameters> parse_dh_table_impl(std::istream &input) {
   }
 
   const std::size_t row_count = doc.GetRowCount();
+  const std::size_t column_count = doc.GetColumnCount();
+
+  SymEngine::Parser parser;
 
   std::vector<DHFrameParameters> joints;
   joints.reserve(row_count);
 
   for (std::size_t i = 0; i < row_count; ++i) {
+    try {
+      std::vector<std::string> row_cells = doc.GetRow<std::string>(i);
+      if (row_cells.size() != column_count) {
+        throw ParseError("Row " + std::to_string(i + 2) + ": expected " +
+                         std::to_string(column_count) + " columns but found " +
+                         std::to_string(row_cells.size()));
+      }
+    } catch (const ParseError &) {
+      throw;
+    } catch (const std::exception &e) {
+      throw ParseError("Row " + std::to_string(i + 2) +
+                       ": error reading row - " + std::string(e.what()));
+    }
     DHFrameParameters joint;
 
     // ── Optional joint name ─────────────────────────────────────────
@@ -174,21 +148,56 @@ std::vector<DHFrameParameters> parse_dh_table_impl(std::istream &input) {
       }
     }
 
-    // ── Required numeric parameters ─────────────────────────────────
-    joint.theta_radians = get_numeric_cell(doc, cols.theta_col, i);
-    joint.alpha_radians = get_numeric_cell(doc, cols.alpha_col, i);
-    joint.r = get_numeric_cell(doc, cols.r_col, i);
-    joint.d = get_numeric_cell(doc, cols.d_col, i);
+    auto get_cell = [&](const std::string &col) -> std::string {
+      try {
+        return doc.GetCell<std::string>(col, i);
+      } catch (const std::exception &) {
+        throw ParseError("Row " + std::to_string(i + 1) + ", column '" + col +
+                         "': missing value.");
+      }
+    };
+
+    std::string theta_str = utilities::trim_copy(get_cell(cols.theta_col));
+    std::string alpha_str = utilities::trim_copy(get_cell(cols.alpha_col));
+    std::string r_str = utilities::trim_copy(get_cell(cols.r_col));
+    std::string d_str = utilities::trim_copy(get_cell(cols.d_col));
+
+    if (theta_str.empty() || alpha_str.empty() || r_str.empty() ||
+        d_str.empty()) {
+      throw ParseError("Row " + std::to_string(i + 2) +
+                       ": empty value in required column.");
+    }
+
+    try {
+      joint.theta = parser.parse(theta_str);
+      joint.alpha = parser.parse(alpha_str);
+      joint.r = parser.parse(r_str);
+      joint.d = parser.parse(d_str);
+    } catch (const SymEngine::ParseError &e) {
+      throw ParseError("Row " + std::to_string(i + 2) +
+                       ": invalid expression '" + std::string(e.what()) + "'");
+    } catch (const SymEngine::SymEngineException &e) {
+      throw ParseError("Row " + std::to_string(i + 2) +
+                       ": failed to parse expression - " +
+                       std::string(e.what()));
+    } catch (const std::exception &e) {
+      throw ParseError("Row " + std::to_string(i + 2) +
+                       ": unexpected error parsing expression - " +
+                       std::string(e.what()));
+    }
 
     // ── Unit conversion ─────────────────────────────────────────────
+    static const auto deg_rad_factor =
+        SymEngine::Expression(SymEngine::real_double(std::numbers::pi)) / 180.0;
+
     if (cols.theta_in_degrees) {
-      joint.theta_radians *= kDegreesToRadians;
+      joint.theta = joint.theta * deg_rad_factor;
     }
     if (cols.alpha_in_degrees) {
-      joint.alpha_radians *= kDegreesToRadians;
+      joint.alpha = joint.alpha * deg_rad_factor;
     }
 
-    joints.push_back(std::move(joint));
+    joints.emplace_back(std::move(joint));
   }
 
   return joints;

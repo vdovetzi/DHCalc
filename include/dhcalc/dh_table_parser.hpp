@@ -1,8 +1,6 @@
 #pragma once
 
 #include <filesystem>
-#include <stdexcept>
-#include <vector>
 
 #include "dhcalc/kinematics.hpp"
 
